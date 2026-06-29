@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE_URL="${TOOLGATE_URL:-http://localhost:8010}"
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  keys:add)
+    alias_name="${1:-}"
+    provider="${2:-}"
+    if [[ -z "$alias_name" || -z "$provider" ]]; then
+      echo "Usage: toolgate keys:add <KEY_ALIAS> <provider>"
+      exit 1
+    fi
+    read -rsp "Enter key value for $alias_name: " key_value
+    echo
+    curl -sS -X POST "$BASE_URL/keys" \
+      -H "Content-Type: application/json" \
+      -d "{\"key_alias\":\"$alias_name\",\"provider\":\"$provider\",\"value\":\"$key_value\"}"
+    echo
+    ;;
+
+  keys:list)
+    curl -sS "$BASE_URL/keys"
+    echo
+    ;;
+
+  keys:get)
+    alias_name="${1:-}"
+    if [[ -z "$alias_name" ]]; then
+      echo "Usage: toolgate keys:get <KEY_ALIAS>"
+      exit 1
+    fi
+    curl -sS "$BASE_URL/keys/$alias_name"
+    echo
+    ;;
+
+  tools:list)
+    curl -sS "$BASE_URL/tools"
+    echo
+    ;;
+
+  tools:removed)
+    curl -sS "$BASE_URL/tools/removed"
+    echo
+    ;;
+
+  tools:get)
+    tool_id="${1:-}"
+    if [[ -z "$tool_id" ]]; then
+      echo "Usage: toolgate tools:get <tool_id>"
+      exit 1
+    fi
+    curl -sS "$BASE_URL/tools/$tool_id"
+    echo
+    ;;
+
+  tools:remove)
+    tool_id="${1:-}"
+    if [[ -z "$tool_id" ]]; then
+      echo "Usage: toolgate tools:remove <tool_id>"
+      exit 1
+    fi
+    curl -sS -X POST "$BASE_URL/tools/$tool_id/remove"
+    echo
+    ;;
+
+  tools:restore)
+    tool_id="${1:-}"
+    if [[ -z "$tool_id" ]]; then
+      echo "Usage: toolgate tools:restore <tool_id>"
+      exit 1
+    fi
+    curl -sS -X POST "$BASE_URL/tools/$tool_id/restore"
+    echo
+    ;;
+
+  tools:execute)
+    tool_id="${1:-}"
+    args_json="${2:-{}}"
+    caller_id="${3:-hermes-chief}"
+    if [[ -z "$tool_id" ]]; then
+      echo "Usage: toolgate tools:execute <tool_id> '<json_args>' [caller_id]"
+      exit 1
+    fi
+    curl -sS -X POST "$BASE_URL/tools/execute" \
+      -H "Content-Type: application/json" \
+      -d "{\"caller_id\":\"$caller_id\",\"tool_id\":\"$tool_id\",\"arguments\":$args_json}"
+    echo
+    ;;
+
+  *)
+    cat <<'EOF'
+ToolGate CLI
+
+Keys:
+  toolgate keys:add <KEY_ALIAS> <provider>
+  toolgate keys:list
+  toolgate keys:get <KEY_ALIAS>
+
+Tools:
+  toolgate tools:list
+  toolgate tools:removed
+  toolgate tools:get <tool_id>
+  toolgate tools:remove <tool_id>
+  toolgate tools:restore <tool_id>
+  toolgate tools:execute <tool_id> '<json_args>' [caller_id]
+EOF
+    ;;
+esac
