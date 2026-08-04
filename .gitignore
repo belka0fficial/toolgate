@@ -1,0 +1,16 @@
+.env
+toolgate/.env
+.venv
+node_modules
+.next
+__pycache__
+*.pyc
+dist
+build
+*.db
+toolgate/pending/*
+!toolgate/pending/.gitkeep
+toolgate/trash/*
+!toolgate/trash/.gitkeep
+dashboard/temporary screenshots/
+dashboard/.env
