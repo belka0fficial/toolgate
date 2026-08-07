@@ -15,6 +15,18 @@ The project is designed for one owner and one primary local agent. ToolGate is t
 
 The dashboard includes a command center, live execution and AI activity, services, tool and automation editors, persistent ToolGate AI design sessions, requests, verification adapters, security controls, secrets, and settings.
 
+## What Is In This Repository
+
+- `toolgate/api/`: FastAPI owner and agent API, restricted executors, automation runtime, verification callbacks, built-in research tool sync, and ToolGate AI planning endpoints.
+- `toolgate/core/`: SQLite control-plane storage, policy helpers, vault integration, planner helpers, research adapters, and runtime paths.
+- `toolgate/cli/`: standard-library agent CLI for scoped execution keys.
+- `toolgate/mcp/`: stdio MCP bridge that exposes active ToolGate tools as native MCP tools for Hermes and other local agents.
+- `dashboard/`: React and Vite owner dashboard for services, tools, automations, requests, secrets, security controls, and ToolGate AI sessions.
+- `integrations/mcp/`: example MCP client configuration.
+- `docs/`: integration notes and dashboard screenshots.
+- `toolgate/tests/`: deterministic tests for the control plane, security model, workflow engine, research adapters, and MCP adapter.
+- `toolgate/scripts/`: live verification utilities for a running local stack.
+
 ## Dashboard Screenshots
 
 | Command Center | ToolGate AI |
@@ -111,6 +123,47 @@ toolgate watch
 
 Add `--json` to any command for a stable machine-readable contract. Values such as integers, arrays, objects, booleans, and `null` are coerced from JSON. Confirmation responses include a `request_id` and exact retry command using `--approval-request-id`.
 
+## Hermes MCP Bridge
+
+ToolGate includes a local stdio MCP bridge for Hermes and similar agents. The
+bridge discovers the active ToolGate tools from ToolGate's own configured
+state, maps their typed inputs to MCP JSON Schema, and invokes ToolGate
+through its internal execution path. Tool IDs are exposed with MCP-friendly
+names such as `research_search` while still executing the original ToolGate
+tool IDs.
+
+Hermes sees these as normal MCP tools through `tools/list` and calls them
+through `tools/call`. ToolGate responses are returned as JSON text inside MCP
+tool content. Approval-required tools return ToolGate's normal
+`CONFIRMATION_REQUIRED` payload, including `request_id`; retry the same MCP tool
+call with `approval_request_id` after owner approval.
+
+The bridge is local and in-repo. It reads active ToolGate tool definitions from
+the control-plane state, syncs built-in research tools before listing, and uses
+ToolGate's own `invoke_tool(...)` path for validation, rate limits, approval
+binding, restricted executors, audit events, and MemoryGate access.
+
+Example config:
+
+```json
+{
+  "mcpServers": {
+    "toolgate": {
+      "command": "python",
+      "args": ["toolgate/mcp/toolgate_mcp.py"],
+      "env": {
+        "TOOLGATE_MCP_ACTOR": "Hermes MCP",
+        "TOOLGATE_MCP_PRESERVE_IDS": "0"
+      }
+    }
+  }
+}
+```
+
+Set `TOOLGATE_MCP_PRESERVE_IDS=1` only if the MCP client accepts dotted tool
+names such as `research.search`. See `docs/HERMES_MCP.md` and
+`integrations/mcp/toolgate.hermes.mcp.json`.
+
 ## Local Deployment
 
 1. Create the local environment file:
@@ -161,6 +214,12 @@ Run the deterministic unit suite:
 .\.venv\Scripts\python.exe -m unittest discover -s toolgate\tests -v
 ```
 
+Run only the MCP adapter tests:
+
+```powershell
+python -m unittest toolgate.tests.test_mcp_adapter -v
+```
+
 With both Docker stacks running, execute the live boundary verifier:
 
 ```powershell
@@ -172,12 +231,18 @@ The live verifier creates temporary namespaced capabilities and keys, tests exec
 ## Project Layout
 
 ```text
-dashboard/              React and Vite owner dashboard
-toolgate/api/           FastAPI control-plane and agent API
-toolgate/cli/           Agent-facing CLI
-toolgate/core/          Vault, policy, persistence, and planner modules
-toolgate/scripts/       Operational verification utilities
-toolgate/tests/         Deterministic security and workflow tests
+dashboard/                 React and Vite owner dashboard
+dashboard/server.py        Local dashboard static server
+docs/HERMES_MCP.md         Hermes MCP bridge behavior and configuration
+docs/screenshots/          Dashboard screenshots used by this README
+integrations/mcp/          Example MCP client configuration
+toolgate/api/              FastAPI control-plane, agent API, and execution runtime
+toolgate/cli/              Agent-facing CLI
+toolgate/core/             Vault, policy, persistence, research, and planner modules
+toolgate/mcp/              MCP bridge for Hermes and other local agents
+toolgate/scripts/          Operational verification utilities
+toolgate/searxng/          Local SearXNG configuration used by research fallback
+toolgate/tests/            Deterministic security, workflow, research, and MCP tests
 ```
 
 ToolGate v2 deliberately starts from a clean control-plane model. Deprecated legacy registries, unrestricted scripts, and old execution paths are not migrated.
