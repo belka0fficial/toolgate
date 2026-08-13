@@ -10,11 +10,11 @@ services:
     volumes:
       - ./:/app/toolgate
     env_file:
-      - .env
+      - path: .env
+        required: false
     networks:
       - default
       - memorygate
-      - emolga
 
   dashboard:
     build:
@@ -43,6 +43,3 @@ networks:
   memorygate:
     external: true
     name: orech_net
-  emolga:
-    external: true
-    name: emolga_gate
