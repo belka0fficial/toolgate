@@ -7,6 +7,10 @@ import hashlib
 import os
 import re
 import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -15,11 +19,15 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from toolgate.core import control_plane  # noqa: E402
+from toolgate.core import vault  # noqa: E402
 
 
 SERVER_NAME = "toolgate"
 SERVER_VERSION = "0.3.0"
 _BOOTSTRAPPED = False
+_SKILL_CACHE_SECONDS = 300
+_MAX_SKILL_TEXT_BYTES = 2048
+_SKILL_CACHE: dict[str, tuple[float, str]] = {}
 
 
 def _bootstrap() -> None:
@@ -124,11 +132,80 @@ def _tool_input_schema(tool: dict) -> dict:
     return schema
 
 
+def _skill_injection_enabled() -> bool:
+    return os.environ.get("TOOLGATE_SKILL_INJECTION") == "1"
+
+
+def _memorygate_setting(name: str, default: str | None = None) -> str | None:
+    value = os.environ.get(name)
+    if value:
+        return value
+    try:
+        return vault.get_key(name)
+    except KeyError:
+        return default
+
+
+def _truncate_bytes(value: str, limit: int) -> str:
+    raw = value.encode("utf-8")
+    if len(raw) <= limit:
+        return value
+    return raw[:limit].decode("utf-8", errors="ignore").rstrip() + "\n[truncated]"
+
+
+def _request_memorygate_skills(tool_id: str) -> list[dict]:
+    base_url = (_memorygate_setting("MEMORYGATE_URL", "http://memorygate-api:8020") or "").rstrip("/")
+    read_key = _memorygate_setting("MEMORYGATE_READ_KEY")
+    if not base_url or not read_key:
+        return []
+    agent_id = _memorygate_setting("TOOLGATE_MEMORYGATE_AGENT_ID", os.environ.get("X_AGENT_ID", "hermes")) or "hermes"
+    query = urllib.parse.urlencode({"tool": tool_id})
+    request = urllib.request.Request(
+        f"{base_url}/context/skills?{query}",
+        headers={
+            "Accept": "application/json",
+            "X-Agent-Id": agent_id,
+            "X-MemoryGate-Key": read_key,
+        },
+    )
+    with urllib.request.urlopen(request, timeout=2) as response:
+        body = json.loads(response.read().decode("utf-8"))
+    return list(body.get("results", []))
+
+
+def _linked_skill_text(tool_id: str) -> str:
+    if not _skill_injection_enabled():
+        return ""
+    now = time.time()
+    cached = _SKILL_CACHE.get(tool_id)
+    if cached and now - cached[0] < _SKILL_CACHE_SECONDS:
+        return cached[1]
+    try:
+        skills = _request_memorygate_skills(tool_id)
+    except (OSError, urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+        skills = []
+    if not skills:
+        _SKILL_CACHE[tool_id] = (now, "")
+        return ""
+    blocks = []
+    for skill in skills:
+        title = str(skill.get("title") or "Untitled skill")
+        version = str(skill.get("version") or "1")
+        body = str(skill.get("body") or "").strip()
+        if body:
+            blocks.append(f"{title} (v{version})\n{body}")
+    text = "\n\nLinked MemoryGate skills:\n" + "\n\n".join(blocks) if blocks else ""
+    text = _truncate_bytes(text, _MAX_SKILL_TEXT_BYTES)
+    _SKILL_CACHE[tool_id] = (now, text)
+    return text
+
+
 def _tool_to_mcp(tool: dict, all_ids: list[str] | None = None) -> dict:
     description = tool.get("description") or f"Invoke ToolGate tool '{tool.get('id', 'unknown')}'."
     if tool.get("authorization") == "owner_confirmation":
         description += " Owner approval may be required."
     description += f" ToolGate id: {tool['id']}."
+    description += _linked_skill_text(str(tool["id"]))
     return {
         "name": _mcp_tool_name(str(tool["id"]), all_ids),
         "description": description,

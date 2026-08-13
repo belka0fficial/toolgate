@@ -49,6 +49,34 @@ class ToolGateMcpTests(unittest.TestCase):
         self.assertIn("ToolGate id: memorygate.context.", tools[0]["description"])
         self.assertEqual("toolgate_request_status", tools[-1]["name"])
 
+    @patch.dict("os.environ", {}, clear=False)
+    @patch("toolgate.mcp.toolgate_mcp._request_memorygate_skills")
+    def test_skill_injection_is_absent_when_flag_off(self, request_skills):
+        toolgate_mcp._SKILL_CACHE.clear()
+        tool = {"id": "payments.charge", "description": "Charge money", "inputs": []}
+
+        result = toolgate_mcp._tool_to_mcp(tool)
+
+        self.assertNotIn("Linked MemoryGate skills", result["description"])
+        request_skills.assert_not_called()
+
+    @patch.dict("os.environ", {"TOOLGATE_SKILL_INJECTION": "1"}, clear=False)
+    @patch("toolgate.mcp.toolgate_mcp._request_memorygate_skills")
+    def test_skill_injection_appends_linked_skill_when_flag_on(self, request_skills):
+        toolgate_mcp._SKILL_CACHE.clear()
+        request_skills.return_value = [{
+            "title": "Approval discipline",
+            "version": "2",
+            "body": "Check amount and recipient before invoking.",
+        }]
+        tool = {"id": "payments.charge", "description": "Charge money", "inputs": []}
+
+        result = toolgate_mcp._tool_to_mcp(tool)
+
+        self.assertIn("Linked MemoryGate skills", result["description"])
+        self.assertIn("Approval discipline (v2)", result["description"])
+        self.assertIn("Check amount and recipient before invoking.", result["description"])
+
     @patch("toolgate.mcp.toolgate_mcp._bootstrap")
     @patch("toolgate.mcp.toolgate_mcp._server_module")
     @patch("toolgate.mcp.toolgate_mcp.control_plane.list_objects")
