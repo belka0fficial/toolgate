@@ -42,4 +42,4 @@ services:
 networks:
   memorygate:
     external: true
-    name: orech_net
+    name: conker_net

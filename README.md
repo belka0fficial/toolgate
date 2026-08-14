@@ -185,7 +185,7 @@ Blank control keys are generated and persisted on first API startup, but their v
 
 ## MemoryGate
 
-MemoryGate is registered as an internal service on the shared `orech_net` Docker network. ToolGate stores a dedicated MemoryGate read credential under `MEMORYGATE_READ_KEY` and exposes only approved read tools. The agent never receives direct MemoryGate credentials.
+MemoryGate is registered as an internal service on the shared `conker_net` Docker network. ToolGate stores a dedicated MemoryGate read credential under `MEMORYGATE_READ_KEY` and exposes only approved read tools. The agent never receives direct MemoryGate credentials.
 
 ToolGate AI retrieves a bounded set of high-confidence memories and a redacted catalog of active tools while drafting. Raw evidence is excluded, all retrieved text is marked as untrusted reference data, generated tool references are checked against the live catalog, and trusted owner limits may only tighten a generated policy. Every AI proposal is revalidated again when it is submitted and approved.
 
