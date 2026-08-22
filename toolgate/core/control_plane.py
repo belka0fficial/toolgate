@@ -215,6 +215,55 @@ def issue_agent_key(name: str, scopes: list[str]) -> tuple[dict, str]:
     return public_agent_key(record), raw
 
 
+def ensure_bootstrap_agent_key(raw: str, scopes: list[str], name: str = "AgentGate Pi") -> dict:
+    """Seed one explicit deployment key without ever persisting its raw value."""
+    if not raw.startswith("tgx_") or len(raw) < 20:
+        raise ValueError("TOOLGATE_BOOTSTRAP_EXECUTION_KEY must start with tgx_ and be at least 20 characters")
+    hashed = hashlib.sha256(raw.encode()).hexdigest()
+    normalized_scopes = scopes or []
+    updated_record: sqlite3.Row | None = None
+    created_record: dict | None = None
+    with _conn() as conn:
+        existing = conn.execute("SELECT * FROM v2_agent_keys WHERE key_hash=?", (hashed,)).fetchone()
+        if existing:
+            current = json.loads(existing["scopes"]) if isinstance(existing["scopes"], str) else existing["scopes"]
+            if current != normalized_scopes:
+                conn.execute(
+                    "UPDATE v2_agent_keys SET scopes=?, status='active' WHERE id=?",
+                    (json.dumps(normalized_scopes), existing["id"]),
+                )
+                existing = conn.execute("SELECT * FROM v2_agent_keys WHERE id=?", (existing["id"],)).fetchone()
+                updated_record = existing
+            result = public_agent_key(existing)
+        else:
+            record = {
+                "id": str(uuid.uuid4()),
+                "name": name,
+                "key_hash": hashed,
+                "scopes": normalized_scopes,
+                "status": "active",
+                "created_at": _now(),
+            }
+            conn.execute(
+                "INSERT INTO v2_agent_keys(id,name,key_hash,scopes,status,created_at) VALUES(?,?,?,?,?,?)",
+                (record["id"], record["name"], record["key_hash"], json.dumps(record["scopes"]), record["status"], record["created_at"]),
+            )
+            created_record = record
+            result = public_agent_key(record)
+    if updated_record:
+        event(
+            "agent_key_bootstrap_scopes_updated",
+            "info",
+            "agent_key",
+            updated_record["id"],
+            "deployment",
+            {"name": name, "scopes": normalized_scopes},
+        )
+    if created_record:
+        event("agent_key_bootstrapped", "info", "agent_key", created_record["id"], "deployment", {"name": name, "scopes": normalized_scopes})
+    return result
+
+
 def public_agent_key(record: dict | sqlite3.Row) -> dict:
     value = dict(record)
     value.pop("key_hash", None)
@@ -252,10 +301,18 @@ def is_scoped(agent: dict, capability: str) -> bool:
     scopes = agent.get("scopes", [])
     if "*" in scopes or capability in scopes:
         return True
+    if any(isinstance(scope, str) and scope.endswith("*") and capability.startswith(scope[:-1]) for scope in scopes):
+        return True
     if capability.startswith("automation:"):
         return "automation:*" in scopes
     tool_id = capability.removeprefix("tool:")
-    return "tool:*" in scopes or f"tool:{tool_id}" in scopes or tool_id in scopes
+    return (
+        "tool:*" in scopes
+        or f"tool:{tool_id}" in scopes
+        or tool_id in scopes
+        or any(isinstance(scope, str) and scope.endswith("*") and tool_id.startswith(scope[:-1]) for scope in scopes)
+        or any(isinstance(scope, str) and scope.startswith("tool:") and scope.endswith("*") and tool_id.startswith(scope[5:-1]) for scope in scopes)
+    )
 
 
 def validate_inputs(schema: list[dict], args: dict) -> list[str]:
@@ -454,7 +511,8 @@ def create_verification_request(title: str, details: str, actor: str, subject_ty
 
 
 def consume_verification(request_id: str, subject_type: str, subject_id: str,
-                         args: dict, version: int | None, actor: str) -> tuple[bool, str]:
+                         args: dict, version: int | None, actor: str,
+                         actor_id: str | None = None) -> tuple[bool, str]:
     """Atomically consume an approved action binding exactly once."""
     now = datetime.now(timezone.utc)
     with _conn() as conn:
@@ -466,6 +524,9 @@ def consume_verification(request_id: str, subject_type: str, subject_id: str,
         binding = record.get("payload", {}).get("binding", {})
         if record.get("kind") != "verification" or record.get("status") != "approved":
             return False, f"Approval request is {record.get('status', 'invalid')}"
+        created_by = record.get("payload", {}).get("created_by_agent_key")
+        if created_by and actor_id != created_by:
+            return False, "Approval request belongs to a different originating agent"
         if binding.get("consumed_at"):
             return False, "Approval request has already been consumed"
         try:

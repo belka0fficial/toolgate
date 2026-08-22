@@ -20,7 +20,7 @@ The dashboard includes a command center, live execution and AI activity, service
 - `toolgate/api/`: FastAPI owner and agent API, restricted executors, automation runtime, verification callbacks, built-in research tool sync, and ToolGate AI planning endpoints.
 - `toolgate/core/`: SQLite control-plane storage, policy helpers, vault integration, planner helpers, research adapters, and runtime paths.
 - `toolgate/cli/`: standard-library agent CLI for scoped execution keys.
-- `toolgate/mcp/`: stdio MCP bridge that exposes active ToolGate tools as native MCP tools for Hermes and other local agents.
+- `toolgate/mcp/`: stdio MCP bridge that exposes active ToolGate tools as native MCP tools for Pi and other local agents.
 - `dashboard/`: React and Vite owner dashboard for services, tools, automations, requests, secrets, security controls, and ToolGate AI sessions.
 - `integrations/mcp/`: example MCP client configuration.
 - `docs/`: integration notes and dashboard screenshots.
@@ -123,16 +123,16 @@ toolgate watch
 
 Add `--json` to any command for a stable machine-readable contract. Values such as integers, arrays, objects, booleans, and `null` are coerced from JSON. Confirmation responses include a `request_id` and exact retry command using `--approval-request-id`.
 
-## Hermes MCP Bridge
+## Local Agent MCP Bridge
 
-ToolGate includes a local stdio MCP bridge for Hermes and similar agents. The
+ToolGate includes a local stdio MCP bridge for Pi and similar agents. The
 bridge discovers the active ToolGate tools from ToolGate's own configured
 state, maps their typed inputs to MCP JSON Schema, and invokes ToolGate
 through its internal execution path. Tool IDs are exposed with MCP-friendly
 names such as `research_search` while still executing the original ToolGate
 tool IDs.
 
-Hermes sees these as normal MCP tools through `tools/list` and calls them
+The agent sees these as normal MCP tools through `tools/list` and calls them
 through `tools/call`. ToolGate responses are returned as JSON text inside MCP
 tool content. Approval-required tools return ToolGate's normal
 `CONFIRMATION_REQUIRED` payload, including `request_id`; retry the same MCP tool
@@ -152,7 +152,7 @@ Example config:
       "command": "python",
       "args": ["toolgate/mcp/toolgate_mcp.py"],
       "env": {
-        "TOOLGATE_MCP_ACTOR": "Hermes MCP",
+        "TOOLGATE_MCP_ACTOR": "Pi MCP",
         "TOOLGATE_MCP_PRESERVE_IDS": "0"
       }
     }
@@ -161,8 +161,8 @@ Example config:
 ```
 
 Set `TOOLGATE_MCP_PRESERVE_IDS=1` only if the MCP client accepts dotted tool
-names such as `research.search`. See `docs/HERMES_MCP.md` and
-`integrations/mcp/toolgate.hermes.mcp.json`.
+names such as `research.search`. See `docs/LOCAL_AGENT_MCP.md` and
+`integrations/mcp/toolgate.local-agent.mcp.json`.
 
 ## Local Deployment
 
@@ -233,13 +233,13 @@ The live verifier creates temporary namespaced capabilities and keys, tests exec
 ```text
 dashboard/                 React and Vite owner dashboard
 dashboard/server.py        Local dashboard static server
-docs/HERMES_MCP.md         Hermes MCP bridge behavior and configuration
+docs/LOCAL_AGENT_MCP.md    Local-agent MCP bridge behavior and configuration
 docs/screenshots/          Dashboard screenshots used by this README
 integrations/mcp/          Example MCP client configuration
 toolgate/api/              FastAPI control-plane, agent API, and execution runtime
 toolgate/cli/              Agent-facing CLI
 toolgate/core/             Vault, policy, persistence, research, and planner modules
-toolgate/mcp/              MCP bridge for Hermes and other local agents
+toolgate/mcp/              MCP bridge for Pi and other local agents
 toolgate/scripts/          Operational verification utilities
 toolgate/searxng/          Local SearXNG configuration used by research fallback
 toolgate/tests/            Deterministic security, workflow, research, and MCP tests

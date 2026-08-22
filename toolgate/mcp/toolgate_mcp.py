@@ -44,7 +44,7 @@ def _server_module():
 
 
 def _local_actor() -> dict:
-    return {"id": "local-mcp", "name": os.environ.get("TOOLGATE_MCP_ACTOR", "Hermes MCP")}
+    return {"id": "local-mcp", "name": os.environ.get("TOOLGATE_MCP_ACTOR", "Pi MCP")}
 
 
 def _visible_tools() -> list[dict]:
@@ -158,7 +158,7 @@ def _request_memorygate_skills(tool_id: str) -> list[dict]:
     read_key = _memorygate_setting("MEMORYGATE_READ_KEY")
     if not base_url or not read_key:
         return []
-    agent_id = _memorygate_setting("TOOLGATE_MEMORYGATE_AGENT_ID", os.environ.get("X_AGENT_ID", "hermes")) or "hermes"
+    agent_id = _memorygate_setting("TOOLGATE_MEMORYGATE_AGENT_ID", os.environ.get("X_AGENT_ID", "pi-agent")) or "pi-agent"
     query = urllib.parse.urlencode({"tool": tool_id})
     request = urllib.request.Request(
         f"{base_url}/context/skills?{query}",

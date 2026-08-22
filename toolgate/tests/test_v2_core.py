@@ -29,6 +29,13 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertTrue(control_plane.is_scoped(automation_agent, "automation:morning"))
         self.assertFalse(control_plane.is_scoped(automation_agent, "weather"))
 
+    def test_tool_scopes_support_safe_prefix_grants(self):
+        research_agent = {"scopes": ["tool:research.*"]}
+        self.assertTrue(control_plane.is_scoped(research_agent, "research.scan-competition"))
+        self.assertTrue(control_plane.is_scoped(research_agent, "tool:research.search"))
+        self.assertFalse(control_plane.is_scoped(research_agent, "filesystem.write"))
+        self.assertFalse(control_plane.is_scoped(research_agent, "automation:morning"))
+
     def test_input_validation_rejects_unknown_and_wrong_typed_values(self):
         schema = [
             {"name": "count", "type": "integer", "required": True, "minimum": 1, "maximum": 3},
@@ -46,20 +53,38 @@ class ControlPlaneTests(unittest.TestCase):
         control_plane.decide_request(request["id"], "approved", "owner")
 
         changed, reason = control_plane.consume_verification(
-            request["id"], "tool", "echo", {"value": 4}, 2, "agent"
+            request["id"], "tool", "echo", {"value": 4}, 2, "agent", "agent-key"
         )
         self.assertFalse(changed)
         self.assertIn("does not match", reason)
 
         approved, reason = control_plane.consume_verification(
-            request["id"], "tool", "echo", {"value": 3}, 2, "agent"
+            request["id"], "tool", "echo", {"value": 3}, 2, "agent", "agent-key"
         )
         self.assertTrue(approved, reason)
         replayed, reason = control_plane.consume_verification(
-            request["id"], "tool", "echo", {"value": 3}, 2, "agent"
+            request["id"], "tool", "echo", {"value": 3}, 2, "agent", "agent-key"
         )
         self.assertFalse(replayed)
         self.assertIn("already been consumed", reason)
+
+
+    def test_verification_consumption_is_bound_to_creator_agent_key(self):
+        request = control_plane.create_verification_request(
+            "Run test", "Bound actor", "agent one", "tool", "echo", {"value": 3}, 2, 60, "agent-key-1"
+        )
+        control_plane.decide_request(request["id"], "approved", "owner")
+
+        stolen, reason = control_plane.consume_verification(
+            request["id"], "tool", "echo", {"value": 3}, 2, "agent two", "agent-key-2"
+        )
+        self.assertFalse(stolen)
+        self.assertIn("originating agent", reason)
+
+        approved, reason = control_plane.consume_verification(
+            request["id"], "tool", "echo", {"value": 3}, 2, "agent one", "agent-key-1"
+        )
+        self.assertTrue(approved, reason)
 
     def test_executor_definition_validation_is_fail_closed(self):
         post_tool = {

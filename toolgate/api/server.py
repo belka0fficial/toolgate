@@ -50,6 +50,10 @@ def startup():
     generated = vault.ensure_control_keys()
     for name in generated:
         print(f"[toolgate] generated and persisted {name}; value intentionally not logged")
+    bootstrap_key = os.environ.get("TOOLGATE_BOOTSTRAP_EXECUTION_KEY", "").strip()
+    if bootstrap_key:
+        scopes = [scope.strip() for scope in os.environ.get("TOOLGATE_BOOTSTRAP_SCOPES", "tool:*,automation:*").split(",") if scope.strip()]
+        control_plane.ensure_bootstrap_agent_key(bootstrap_key, scopes)
     ensure_builtin_research_capabilities()
 
 
@@ -810,7 +814,7 @@ def invoke_tool(tool: dict, args: dict, actor: str, *, approval_request_id: str 
     if authorization in {"owner_confirmation", "ai_review"} and not approval_granted:
         if approval_request_id:
             approved, reason = control_plane.consume_verification(
-                approval_request_id, "tool", tool["id"], args, tool.get("version"), actor)
+                approval_request_id, "tool", tool["id"], args, tool.get("version"), actor, actor_id)
             if not approved:
                 deny("APPROVAL_INVALID", reason, 409, "Request a new confirmation for this exact action")
         else:
@@ -1772,7 +1776,7 @@ def run_automation(automation_id: str, payload: V2Invoke, agent: dict = Depends(
         if payload.approval_request_id:
             approval_granted, reason = control_plane.consume_verification(
                 payload.approval_request_id, "automation", automation_id, payload.args,
-                automation.get("version"), agent["name"])
+                automation.get("version"), agent["name"], agent["id"])
             if not approval_granted:
                 deny("APPROVAL_INVALID", reason, 409, "Request a new confirmation for this exact automation run")
         else:

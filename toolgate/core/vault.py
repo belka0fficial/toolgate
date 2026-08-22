@@ -70,6 +70,10 @@ def ensure_control_keys() -> dict:
     for name in ("TOOLGATE_ADMIN_KEY",):
         if values.get(name):
             continue
+        configured = os.environ.get(name, "").strip()
+        if configured:
+            set_key(str(ENV_PATH), name, configured, quote_mode="never")
+            continue
         new_value = uuid.uuid4().hex
         set_key(str(ENV_PATH), name, new_value, quote_mode="never")
         os.environ[name] = new_value

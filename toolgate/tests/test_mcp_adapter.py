@@ -91,7 +91,7 @@ class ToolGateMcpTests(unittest.TestCase):
         server_module.return_value.invoke_tool.assert_called_once_with(
             tool,
             {},
-            "Hermes MCP",
+            "Pi MCP",
             approval_request_id="req-1",
             actor_id="local-mcp",
         )
