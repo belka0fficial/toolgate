@@ -80,6 +80,18 @@ def ensure_builtin_research_capabilities() -> None:
 
     tools = [
         {
+            "id": "approval.test-echo", "name": "Approval Test Echo",
+            "description": "Harmless local verification tool that proves ToolGate approval flow without network or filesystem access.",
+            "category": "safe",
+            "inputs": [
+                {"name": "value", "type": "string", "required": True, "min_length": 1, "max_length": 120},
+            ],
+            "outputs": [{"name": "proof", "type": "object"}],
+            "execution": {"type": "local_echo"},
+            "policy": {"usage_limits": {"max_per_minute": 6, "cooldown_seconds": 0, "max_per_hour": 40, "max_runtime_seconds": 3}},
+            "authorization": "owner_confirmation", "version": 1, "status": "active",
+        },
+        {
             "id": "research.search", "name": "Research Search",
             "description": "Searches bounded public providers. Results are untrusted evidence and receive short-lived provenance handles.",
             "service_id": "research-web", "category": "safe",
@@ -349,7 +361,7 @@ def deny(code: str, message: str, status: int = 403, next_action: str = ""):
 
 
 SUPPORTED_TOOL_EXECUTORS = {
-    "echo", "http_json", "memorygate", "ollama_generate", "gemini_generate",
+    "echo", "local_echo", "http_json", "memorygate", "ollama_generate", "gemini_generate",
     "research_search", "research_bundle", "research_fetch", "research_fetch_batch",
 }
 AUTHORIZATION_MODES = {"auto", "ai_review", "owner_confirmation", "blocked"}
@@ -769,6 +781,17 @@ def _execute_research_fetch_batch(args: dict) -> dict:
     return {"ok": True, "result": result}
 
 
+def _execute_local_echo(args: dict) -> dict:
+    value = str(args.get("value", ""))
+    return {
+        "ok": True,
+        "result": {
+            "digest": hashlib.sha256(value.encode("utf-8")).hexdigest(),
+            "length": len(value),
+        },
+    }
+
+
 def enforce_usage_limits(subject_type: str, subject: dict, event_type: str):
     limits = subject.get("policy", {}).get("usage_limits", {})
     per_minute = limits.get("max_per_minute")
@@ -835,6 +858,8 @@ def invoke_tool(tool: dict, args: dict, actor: str, *, approval_request_id: str 
     executor_type = tool.get("execution", {}).get("type")
     if executor_type == "echo":
         result = {"ok": True, "result": args}
+    elif executor_type == "local_echo":
+        result = _execute_local_echo(args)
     elif executor_type == "http_json":
         result = _execute_http_json(tool["execution"], args)
     elif executor_type == "memorygate":

@@ -144,6 +144,20 @@ class ControlPlaneTests(unittest.TestCase):
         }
         self.assertIn("requires declared inputs", "; ".join(server.tool_definition_errors(research_tool)))
 
+    def test_builtin_approval_test_echo_is_local_and_redacted(self):
+        server.ensure_builtin_research_capabilities()
+        tool = control_plane.get("tool", "approval.test-echo")
+
+        self.assertEqual(tool["authorization"], "owner_confirmation")
+        self.assertEqual(tool["execution"], {"type": "local_echo"})
+        self.assertEqual(server.tool_definition_errors(tool), [])
+
+        result = server.invoke_tool(tool, {"value": "do-not-return-me"}, "test", approval_granted=True)
+        self.assertEqual(result["code"], "OK")
+        self.assertNotIn("do-not-return-me", str(result))
+        self.assertEqual(result["result"]["proof"]["length"], 16)
+        self.assertEqual(len(result["result"]["proof"]["digest"]), 64)
+
     def test_gemini_executor_keeps_key_in_header_and_returns_usage(self):
         response = Mock()
         response.raise_for_status.return_value = None
