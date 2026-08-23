@@ -246,6 +246,10 @@ class AgentKeyCreate(BaseModel):
     scopes: list[str] = []
 
 
+class AgentKeyScopes(BaseModel):
+    scopes: list[str] = []
+
+
 class V2Service(BaseModel):
     id: str | None = None
     name: str
@@ -1578,6 +1582,14 @@ def create_agent_key(payload: AgentKeyCreate, _tier: str = Depends(require_admin
     return {"key": raw, "record": record}
 
 
+@app.patch("/v2/agent-keys/{key_id}/scopes")
+def update_agent_key_scopes(key_id: str, payload: AgentKeyScopes, _tier: str = Depends(require_admin)):
+    record = control_plane.update_agent_key_scopes(key_id, payload.scopes)
+    if not record:
+        raise HTTPException(404, "agent key not found")
+    return record
+
+
 @app.delete("/v2/agent-keys/{key_id}")
 def revoke_agent_key(key_id: str, _tier: str = Depends(require_admin)):
     if not control_plane.revoke_agent_key(key_id):
@@ -1652,7 +1664,7 @@ def agent_tools(agent: dict = Depends(require_agent)):
 
 @app.get("/v2/agent/status")
 def agent_status(agent: dict = Depends(require_agent)):
-    return {"code": "OK", "message": "ToolGate is online", "agent": agent["name"],
+    return {"code": "OK", "message": "ToolGate is online", "id": agent["id"], "agent": agent["name"],
             "scopes": agent.get("scopes", []), "lockdown": control_plane.settings().get("lockdown", False)}
 
 

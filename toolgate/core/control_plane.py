@@ -278,6 +278,21 @@ def list_agent_keys() -> list[dict]:
     return [public_agent_key(row) for row in rows]
 
 
+def update_agent_key_scopes(key_id: str, scopes: list[str], actor: str = "admin") -> dict | None:
+    normalized = [str(scope).strip() for scope in scopes if str(scope).strip()]
+    with _conn() as conn:
+        row = conn.execute("SELECT * FROM v2_agent_keys WHERE id=?", (key_id,)).fetchone()
+        if not row:
+            return None
+        conn.execute(
+            "UPDATE v2_agent_keys SET scopes=?, status='active' WHERE id=?",
+            (json.dumps(normalized), key_id),
+        )
+        updated = conn.execute("SELECT * FROM v2_agent_keys WHERE id=?", (key_id,)).fetchone()
+    event("agent_key_scopes_updated", "info", "agent_key", key_id, actor, {"scopes": normalized})
+    return public_agent_key(updated)
+
+
 def authenticate_agent(raw: str | None) -> dict | None:
     if not raw:
         return None

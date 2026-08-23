@@ -36,6 +36,19 @@ class ControlPlaneTests(unittest.TestCase):
         self.assertFalse(control_plane.is_scoped(research_agent, "filesystem.write"))
         self.assertFalse(control_plane.is_scoped(research_agent, "automation:morning"))
 
+    def test_agent_key_scopes_can_be_updated_without_raw_key(self):
+        record, raw = control_plane.issue_agent_key("Scoped agent", ["tool:*"])
+        updated = control_plane.update_agent_key_scopes(record["id"], ["tool:research.*"])
+        self.assertEqual(updated["id"], record["id"])
+        self.assertEqual(updated["scopes"], ["tool:research.*"])
+        self.assertEqual(control_plane.authenticate_agent(raw)["scopes"], ["tool:research.*"])
+
+    def test_agent_status_exposes_public_key_id_for_scope_sync(self):
+        status = server.agent_status({"id": "agent-key-1", "name": "Scoped agent", "scopes": ["tool:research.*"]})
+        self.assertEqual(status["id"], "agent-key-1")
+        self.assertEqual(status["agent"], "Scoped agent")
+        self.assertEqual(status["scopes"], ["tool:research.*"])
+
     def test_input_validation_rejects_unknown_and_wrong_typed_values(self):
         schema = [
             {"name": "count", "type": "integer", "required": True, "minimum": 1, "maximum": 3},
